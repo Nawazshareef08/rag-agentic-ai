@@ -15,7 +15,10 @@ class QuestionRequest(BaseModel):
 
 
 class AnswerResponse(BaseModel):
-    answer: str
+    query: str
+    final_answer: str
+    retrieved_context_chunks: list[str]
+    confidence_score: float
 
 
 @app.get("/")
@@ -27,8 +30,11 @@ def root():
 
 @app.post("/chat", response_model=AnswerResponse)
 def chat(request: QuestionRequest):
-    answer = ask_question(request.question)
+    result = ask_question(request.question)
 
     return {
-        "answer": answer
+        "query": request.question,
+        "final_answer": result["final_answer"],
+        "retrieved_context_chunks": result["retrieved_context_chunks"],
+        "confidence_score": result["confidence_score"],
     }

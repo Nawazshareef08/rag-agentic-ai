@@ -14,7 +14,9 @@ load_dotenv()
 class GraphState(TypedDict):
     question: str
     context: str
+    context_chunks: list[str]
     answer: str
+    confidence_score: float
 
 
 embeddings = HuggingFaceEmbeddings(
@@ -45,13 +47,16 @@ def retrieve(state: GraphState):
         k=4,
     )
 
-    context = "\n\n".join(
+    context_chunks = [
         document.page_content
         for document in documents
-    )
+    ]
+
+    context = "\n\n".join(context_chunks)
 
     return {
         "context": context,
+        "context_chunks": context_chunks,
     }
 
 
@@ -61,8 +66,11 @@ def generate_answer(state: GraphState):
 about the Agentic AI eBook.
 
 Use ONLY the provided context to answer the question.
+
 If the answer is not present in the context, say:
 "I couldn't find that information in the provided eBook."
+
+Do not use outside knowledge.
 
 Context:
 {context}
@@ -82,8 +90,18 @@ Answer:"""
         }
     )
 
+    answer = response.content
+
+    if "I couldn't find that information" in answer:
+        confidence_score = 0.0
+    elif state["context_chunks"]:
+        confidence_score = 0.9
+    else:
+        confidence_score = 0.0
+
     return {
-        "answer": response.content,
+        "answer": answer,
+        "confidence_score": confidence_score,
     }
 
 
@@ -99,13 +117,19 @@ workflow.add_edge("generate_answer", END)
 rag_graph = workflow.compile()
 
 
-def ask_question(question: str) -> str:
+def ask_question(question: str):
     result = rag_graph.invoke(
         {
             "question": question,
             "context": "",
+            "context_chunks": [],
             "answer": "",
+            "confidence_score": 0.0,
         }
     )
 
-    return result["answer"]
+    return {
+        "final_answer": result["answer"],
+        "retrieved_context_chunks": result["context_chunks"],
+        "confidence_score": result["confidence_score"],
+    }
